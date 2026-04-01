@@ -11,6 +11,12 @@ const cacheName = `${cacheNamePrefix}${self.assetsManifest.version}`;
 const offlineAssetsInclude = [ /\.dll$/, /\.pdb$/, /\.wasm/, /\.html/, /\.js$/, /\.json$/, /\.css$/, /\.woff$/, /\.png$/, /\.jpe?g$/, /\.gif$/, /\.ico$/, /\.blat$/, /\.dat$/, /\.webmanifest$/ ];
 const offlineAssetsExclude = [ /^service-worker\.js$/ ];
 
+// External dependencies that must also be available offline
+const externalCacheName = 'external-v1';
+const externalUrls = [
+    'https://cdn.tailwindcss.com'
+];
+
 // Replace with your base path if you are hosting on a subfolder. Ensure there is a trailing '/'.
 const base = "/";
 const baseUrl = new URL(base, self.origin);
@@ -19,7 +25,13 @@ const manifestUrlList = self.assetsManifest.assets.map(asset => new URL(asset.ur
 async function onInstall(event) {
     console.info('Service worker: Install');
 
-    // Fetch and cache all matching items from the assets manifest
+    // Pre-cache external dependencies (Tailwind CDN, etc.)
+    const extCache = await caches.open(externalCacheName);
+    await Promise.allSettled(
+        externalUrls.map(url => extCache.add(new Request(url, { cache: 'no-cache' })))
+    );
+
+    // Cache all Blazor app assets
     const assetsRequests = self.assetsManifest.assets
         .filter(asset => offlineAssetsInclude.some(pattern => pattern.test(asset.url)))
         .filter(asset => !offlineAssetsExclude.some(pattern => pattern.test(asset.url)))
@@ -30,7 +42,7 @@ async function onInstall(event) {
 async function onActivate(event) {
     console.info('Service worker: Activate');
 
-    // Delete unused caches
+    // Delete stale app caches (keep external cache across versions)
     const cacheKeys = await caches.keys();
     await Promise.all(cacheKeys
         .filter(key => key.startsWith(cacheNamePrefix) && key !== cacheName)
@@ -38,18 +50,28 @@ async function onActivate(event) {
 }
 
 async function onFetch(event) {
-    let cachedResponse = null;
-    if (event.request.method === 'GET') {
-        // For all navigation requests, try to serve index.html from cache,
-        // unless that request is for an offline resource.
-        // If you need some URLs to be server-rendered, edit the following check to exclude those URLs
-        const shouldServeIndexHtml = event.request.mode === 'navigate'
-            && !manifestUrlList.some(url => url === event.request.url);
+    if (event.request.method !== 'GET') return fetch(event.request);
 
-        const request = shouldServeIndexHtml ? 'index.html' : event.request;
-        const cache = await caches.open(cacheName);
-        cachedResponse = await cache.match(request);
+    const url = event.request.url;
+
+    // Serve external dependencies from the external cache, falling back to network
+    if (externalUrls.some(u => url.startsWith(u))) {
+        const extCache = await caches.open(externalCacheName);
+        const cached = await extCache.match(event.request);
+        if (cached) return cached;
+        // Network fallback — also update the cache for next time
+        const fresh = await fetch(event.request);
+        if (fresh.ok) extCache.put(event.request, fresh.clone());
+        return fresh;
     }
+
+    // For navigation requests serve index.html from app cache
+    const shouldServeIndexHtml = event.request.mode === 'navigate'
+        && !manifestUrlList.some(u => u === url);
+
+    const request = shouldServeIndexHtml ? 'index.html' : event.request;
+    const cache = await caches.open(cacheName);
+    const cachedResponse = await cache.match(request);
 
     return cachedResponse || fetch(event.request);
 }
