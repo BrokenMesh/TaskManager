@@ -1,0 +1,80 @@
+@using TaskManager.Models
+
+@if (Show)
+{
+    <div class="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-end sm:items-center justify-center z-50 animate-overlay-in"
+         @onclick="Cancel">
+        <div class="bg-white dark:bg-gray-900 rounded-t-3xl sm:rounded-2xl px-5 pt-6 pb-8 w-full sm:max-w-sm flex flex-col gap-3 animate-modal-in max-h-[90dvh] overflow-y-auto"
+             @onclick:stopPropagation>
+
+            <h2 class="text-lg font-bold text-gray-900 dark:text-gray-100">New Habit</h2>
+
+            <div>
+                <label class="text-xs font-semibold text-gray-500 dark:text-gray-400 block mb-1">Name</label>
+                <input class="w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:border-green-500 dark:focus:border-green-400 transition-colors"
+                       placeholder="e.g. Morning run" @bind="_name" @bind:event="oninput" maxlength="60" />
+            </div>
+
+            <div>
+                <label class="text-xs font-semibold text-gray-500 dark:text-gray-400 block mb-1">
+                    Description <span class="font-normal text-gray-400">(optional)</span>
+                </label>
+                <textarea class="w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm resize-none focus:outline-none focus:border-green-500 dark:focus:border-green-400 transition-colors font-sans"
+                          placeholder="What does success look like?" @bind="_description" rows="3"></textarea>
+            </div>
+
+            @if (!string.IsNullOrEmpty(_error))
+            {
+                <p class="text-red-500 text-xs -mt-1">@_error</p>
+            }
+
+            <div class="flex gap-2 pt-1">
+                <button class="px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-sm font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 active:scale-95 transition-all"
+                        @onclick="Cancel">Cancel</button>
+                <button class="flex-1 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 active:bg-green-800 active:scale-[0.98] text-white text-sm font-semibold transition-all"
+                        @onclick="Save">Save</button>
+            </div>
+
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool Show { get; set; }
+    [Parameter] public EventCallback<bool> ShowChanged { get; set; }
+    [Parameter] public EventCallback<Habit> OnSave { get; set; }
+
+    private string _name = "";
+    private string _description = "";
+    private string _error = "";
+
+    protected override void OnParametersSet()
+    {
+        // Reset form each time the modal opens
+        if (Show && _name == "" && _description == "")
+            _error = "";
+    }
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(_name))
+        {
+            _error = "Please enter a name.";
+            return;
+        }
+        var habit = new Habit { Name = _name.Trim(), Description = _description.Trim() };
+        _name = "";
+        _description = "";
+        _error = "";
+        await OnSave.InvokeAsync(habit);
+        await ShowChanged.InvokeAsync(false);
+    }
+
+    private async Task Cancel()
+    {
+        _name = "";
+        _description = "";
+        _error = "";
+        await ShowChanged.InvokeAsync(false);
+    }
+}

@@ -1,0 +1,97 @@
+@using TaskManager.Models
+
+<!-- Scrollable calendar grid -->
+<div id="ht-grid-scroll" class="flex-1 overflow-y-auto px-3 pb-6">
+
+    <!-- Sticky weekday header -->
+    <div class="grid grid-cols-7 gap-1 py-2.5 sticky top-0 bg-gray-50 dark:bg-gray-950 z-10">
+        @foreach (var wd in new[] { "Mo", "Tu", "We", "Th", "Fr", "Sa", "Su" })
+        {
+            <div class="text-center text-[10px] font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-wider">@wd</div>
+        }
+    </div>
+
+    @foreach (var month in Months)
+    {
+        var daysInMonth = DateTime.DaysInMonth(month.Year, month.Month);
+        var firstDay    = new DateOnly(month.Year, month.Month, 1);
+        var offset      = ((int)firstDay.DayOfWeek + 6) % 7; // Mon = 0
+
+        <div class="mt-4 animate-month-in">
+            <div class="text-[11px] font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wider mb-2">
+                @firstDay.ToString("MMMM yyyy")
+            </div>
+            <div class="grid grid-cols-7 gap-1">
+                @for (int i = 0; i < offset; i++) { <div></div> }
+
+                @for (int d = 1; d <= daysInMonth; d++)
+                {
+                    var date        = new DateOnly(month.Year, month.Month, d);
+                    var isFuture    = date > Today;
+                    var isToday     = date == Today;
+                    var key         = date.ToString("yyyy-MM-dd");
+                    var hasEntry    = EntriesByDate.TryGetValue(key, out var entry);
+                    var completeness = hasEntry ? entry!.Completeness : -1;
+                    var dayNum      = d;
+
+                    <div class="ht-day aspect-square rounded-[5px] flex items-end justify-end p-0.5 min-h-[34px] relative cursor-pointer
+                                @(isFuture    ? "ht-day-future opacity-30 !bg-gray-100 dark:!bg-gray-800/30 pointer-events-none" : "")
+                                @(isToday && !isFuture ? "ht-day-today" : "")"
+                         style="@(!isFuture ? $"background-color:{Color(completeness)};" : "")"
+                         title="@Tooltip(date, completeness, isFuture)"
+                         @onclick="() => OnDayClicked.InvokeAsync(date)">
+                        <span class="text-[9px] leading-none select-none text-black/40 dark:text-white/50">@dayNum</span>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+<!-- Add entry button -->
+<div class="px-4 py-3 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 shrink-0">
+    <button class="w-full py-2.5 rounded-xl bg-green-600 hover:bg-green-700 active:bg-green-800 active:scale-[0.98] text-white text-sm font-semibold transition-all"
+            @onclick="OnAddEntryClicked">+ Add Entry</button>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Dictionary<string, HabitEntry> EntriesByDate { get; set; } = [];
+    [Parameter, EditorRequired] public DateOnly Today { get; set; }
+    [Parameter] public bool IsDarkMode { get; set; }
+    [Parameter] public EventCallback<DateOnly> OnDayClicked { get; set; }
+    [Parameter] public EventCallback OnAddEntryClicked { get; set; }
+
+    private IReadOnlyList<DateOnly> Months => GetMonths();
+
+    private List<DateOnly> GetMonths()
+    {
+        var months = new List<DateOnly>();
+        var start  = new DateOnly(Today.Year, Today.Month, 1).AddMonths(-5);
+        for (var m = start; m <= Today; m = m.AddMonths(1))
+            months.Add(m);
+        return months;
+    }
+
+    private string Color(int c)
+    {
+        if (IsDarkMode)
+        {
+            if (c <= 0)  return "#161b22";
+            if (c <= 25) return "#0e4429";
+            if (c <= 50) return "#006d32";
+            if (c <= 75) return "#26a641";
+            return "#39d353";
+        }
+        if (c <= 0)  return "#ebedf0";
+        if (c <= 25) return "#9be9a8";
+        if (c <= 50) return "#40c463";
+        if (c <= 75) return "#30a14e";
+        return "#216e39";
+    }
+
+    private static string Tooltip(DateOnly date, int c, bool future)
+    {
+        if (future) return date.ToString("MMM d");
+        return c >= 0 ? $"{date:MMM d}: {c}%" : $"{date:MMM d}: No entry";
+    }
+}

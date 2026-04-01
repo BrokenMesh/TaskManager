@@ -1,0 +1,105 @@
+@using TaskManager.Models
+
+<div class="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
+    @{
+        var all              = EntriesByDate.Values.ToList();
+        var count            = all.Count;
+        var avg              = count > 0 ? (int)all.Average(e => e.Completeness) : 0;
+        var (streak, best)   = Streaks();
+        var perfect          = all.Count(e => e.Completeness == 100);
+        var start            = DateOnly.Parse(SelectedHabit.CreatedAt);
+        var totalDays        = Today.DayNumber - start.DayNumber + 1;
+        var rate             = totalDays > 0 ? (int)(count * 100.0 / totalDays) : 0;
+    }
+
+    <div class="grid grid-cols-2 gap-3">
+        <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-4 animate-stat-in" style="animation-delay:0ms">
+            <div class="text-3xl font-bold text-gray-900 dark:text-gray-100 leading-none">@count</div>
+            <div class="text-xs text-gray-500 dark:text-gray-400 mt-1.5">Total entries</div>
+        </div>
+        <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-4 animate-stat-in" style="animation-delay:50ms">
+            <div class="text-3xl font-bold text-gray-900 dark:text-gray-100 leading-none">@avg<span class="text-base font-medium text-gray-400">%</span></div>
+            <div class="text-xs text-gray-500 dark:text-gray-400 mt-1.5">Avg completeness</div>
+        </div>
+        <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-4 animate-stat-in" style="animation-delay:100ms">
+            <div class="text-3xl font-bold text-gray-900 dark:text-gray-100 leading-none">@rate<span class="text-base font-medium text-gray-400">%</span></div>
+            <div class="text-xs text-gray-500 dark:text-gray-400 mt-1.5">Days tracked</div>
+        </div>
+        <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-4 animate-stat-in" style="animation-delay:150ms">
+            <div class="text-3xl font-bold text-green-500 leading-none">@streak</div>
+            <div class="text-xs text-gray-500 dark:text-gray-400 mt-1.5">Current streak 🔥</div>
+        </div>
+        <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-4 animate-stat-in" style="animation-delay:200ms">
+            <div class="text-3xl font-bold text-gray-900 dark:text-gray-100 leading-none">@best</div>
+            <div class="text-xs text-gray-500 dark:text-gray-400 mt-1.5">Longest streak</div>
+        </div>
+        <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-4 animate-stat-in" style="animation-delay:250ms">
+            <div class="text-3xl font-bold text-yellow-500 leading-none">@perfect</div>
+            <div class="text-xs text-gray-500 dark:text-gray-400 mt-1.5">Perfect days ⭐</div>
+        </div>
+    </div>
+
+    <div class="pt-2 border-t border-gray-200 dark:border-gray-800 animate-stat-in" style="animation-delay:300ms">
+        @if (!_confirmDelete)
+        {
+            <button class="w-full py-2.5 rounded-xl bg-red-500 hover:bg-red-600 active:bg-red-700 active:scale-[0.98] text-white text-sm font-semibold transition-all"
+                    @onclick="() => _confirmDelete = true">Delete habit</button>
+        }
+        else
+        {
+            <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-2xl p-4 flex flex-col gap-3 animate-stat-in">
+                <p class="text-sm text-red-700 dark:text-red-300 font-medium">
+                    Delete "<strong>@SelectedHabit.Name</strong>" and all its entries?
+                </p>
+                <div class="flex gap-2">
+                    <button class="flex-1 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-sm font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 active:scale-95 transition-all"
+                            @onclick="() => _confirmDelete = false">Cancel</button>
+                    <button class="flex-1 py-2 rounded-xl bg-red-600 hover:bg-red-700 active:scale-[0.98] text-white text-sm font-semibold transition-all"
+                            @onclick="OnDeleteHabit">Yes, delete</button>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Dictionary<string, HabitEntry> EntriesByDate { get; set; } = [];
+    [Parameter, EditorRequired] public Habit SelectedHabit { get; set; } = new();
+    [Parameter, EditorRequired] public DateOnly Today { get; set; }
+    [Parameter] public EventCallback OnDeleteHabit { get; set; }
+
+    private bool _confirmDelete;
+    private string _lastHabitId = "";
+
+    protected override void OnParametersSet()
+    {
+        if (SelectedHabit.Id != _lastHabitId) { _confirmDelete = false; _lastHabitId = SelectedHabit.Id; }
+    }
+
+    private (int current, int longest) Streaks()
+    {
+        if (EntriesByDate.Count == 0) return (0, 0);
+
+        int longest = 0, run = 0;
+        for (var d = Today; d >= Today.AddDays(-365); d = d.AddDays(-1))
+        {
+            if (EntriesByDate.TryGetValue(d.ToString("yyyy-MM-dd"), out var e) && e.Completeness > 0)
+            {
+                run++;
+                if (run > longest) longest = run;
+            }
+            else run = 0;
+        }
+
+        int current = 0;
+        for (var d = Today; ; d = d.AddDays(-1))
+        {
+            if (EntriesByDate.TryGetValue(d.ToString("yyyy-MM-dd"), out var e) && e.Completeness > 0)
+                current++;
+            else
+                break;
+        }
+
+        return (current, longest);
+    }
+}

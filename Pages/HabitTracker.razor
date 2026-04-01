@@ -1,429 +1,180 @@
 @page "/habits"
-@using TaskManager.Models
-@using TaskManager.Services
 @inject HabitService HabitSvc
+@inject IJSRuntime JS
 
-<PageTitle>Habit Tracker</PageTitle>
+<PageTitle>Habits</PageTitle>
 
-<div class="ht-root">
+<div class="flex flex-col h-dvh bg-gray-50 dark:bg-gray-950 overflow-hidden">
 
-    <!-- ── Top bar: habit selector + add habit ── -->
-    <div class="ht-topbar">
-        @if (habits.Count == 0)
-        {
-            <span class="ht-no-habits">No habits yet</span>
-        }
-        else
-        {
-            <select class="ht-select" @bind="selectedHabitId" @bind:after="OnHabitChanged">
-                @foreach (var h in habits)
-                {
-                    <option value="@h.Id">@h.Name</option>
-                }
-            </select>
-        }
-        <button class="ht-btn ht-btn-outline" @onclick="OpenAddHabit">+ Habit</button>
-    </div>
+    <HabitHeader Habits="@_habits"
+                 SelectedHabitId="@_selectedId"
+                 SelectedHabitIdChanged="OnHabitSelected"
+                 IsDarkMode="@_dark"
+                 OnAddHabitClicked="() => _showAddHabit = true"
+                 OnToggleDarkMode="ToggleDark" />
 
-    @if (selectedHabit is not null)
+    @if (_selected is not null)
     {
-        <!-- ── View tabs ── -->
-        <div class="ht-tabs">
-            <button class="ht-tab @(showStats ? "" : "active")" @onclick="() => showStats = false">Grid</button>
-            <button class="ht-tab @(showStats ? "active" : "")" @onclick="() => showStats = true">Statistics</button>
+        <!-- Tabs -->
+        <div class="flex bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 shrink-0">
+            <button class="flex-1 py-2.5 text-sm font-semibold border-b-2 bg-transparent transition-colors
+                           @(!_stats ? "text-green-600 border-green-600"
+                                     : "text-gray-500 dark:text-gray-400 border-transparent")"
+                    @onclick="() => _stats = false">Grid</button>
+            <button class="flex-1 py-2.5 text-sm font-semibold border-b-2 bg-transparent transition-colors
+                           @(_stats  ? "text-green-600 border-green-600"
+                                     : "text-gray-500 dark:text-gray-400 border-transparent")"
+                    @onclick="() => _stats = true">Statistics</button>
         </div>
 
-        @if (!showStats)
+        @if (!_stats)
         {
-            <!-- ════ GRID VIEW ════ -->
-            <div class="ht-grid-scroll">
-                <!-- Sticky weekday header -->
-                <div class="ht-weekday-row">
-                    @foreach (var d in new[] { "Mo", "Tu", "We", "Th", "Fr", "Sa", "Su" })
-                    {
-                        <div class="ht-weekday-label">@d</div>
-                    }
-                </div>
-
-                @foreach (var month in GetMonthsToDisplay())
-                {
-                    var daysInMonth = DateTime.DaysInMonth(month.Year, month.Month);
-                    var firstDay = new DateOnly(month.Year, month.Month, 1);
-                    var offset = ((int)firstDay.DayOfWeek + 6) % 7; // Monday = 0
-
-                    <div class="ht-month-section">
-                        <div class="ht-month-label">@firstDay.ToString("MMMM yyyy")</div>
-                        <div class="ht-day-grid">
-                            @for (int i = 0; i < offset; i++)
-                            {
-                                <div class="ht-day-cell ht-day-empty"></div>
-                            }
-                            @for (int d = 1; d <= daysInMonth; d++)
-                            {
-                                var date = new DateOnly(month.Year, month.Month, d);
-                                var isFuture = date > today;
-                                var key = date.ToString("yyyy-MM-dd");
-                                var hasEntry = entriesByDate.TryGetValue(key, out var entry);
-                                var completeness = hasEntry ? entry!.Completeness : -1;
-                                var dayNum = d; // capture for lambda
-                                <div class="ht-day-cell @(isFuture ? "ht-day-future" : "")"
-                                     style="@(isFuture ? "" : $"background-color:{GetColor(completeness)};")"
-                                     title="@GetTooltip(date, completeness, isFuture)"
-                                     @onclick="() => OnDayClick(date, hasEntry ? entry : null)">
-                                    <span class="ht-day-num">@dayNum</span>
-                                </div>
-                            }
-                        </div>
-                    </div>
-                }
-            </div>
-
-            <!-- ── Bottom: add entry ── -->
-            <div class="ht-bottombar">
-                <button class="ht-btn ht-btn-primary" @onclick="OpenAddEntry">+ Add Entry</button>
-            </div>
+            <HabitGridView EntriesByDate="@_entries"
+                           Today="@_today"
+                           IsDarkMode="@_dark"
+                           OnDayClicked="OpenEntryForDay"
+                           OnAddEntryClicked="OpenNewEntry" />
         }
         else
         {
-            <!-- ════ STATISTICS VIEW ════ -->
-            <div class="ht-stats">
-                @{
-                    var allEntries = entriesByDate.Values.ToList();
-                    var entryCount = allEntries.Count;
-                    var avgCompletion = entryCount > 0 ? (int)allEntries.Average(e => e.Completeness) : 0;
-                    var (currentStreak, longestStreak) = ComputeStreaks();
-                    var perfect = allEntries.Count(e => e.Completeness == 100);
-                    var habitStart = DateOnly.Parse(selectedHabit.CreatedAt);
-                    var totalDays = today.DayNumber - habitStart.DayNumber + 1;
-                    var completionRate = totalDays > 0 ? (int)(entryCount * 100.0 / totalDays) : 0;
-                }
-
-                <div class="ht-stat-card">
-                    <div class="ht-stat-value">@entryCount</div>
-                    <div class="ht-stat-label">Total entries</div>
-                </div>
-                <div class="ht-stat-card">
-                    <div class="ht-stat-value">@avgCompletion<span class="ht-stat-unit">%</span></div>
-                    <div class="ht-stat-label">Avg completeness</div>
-                </div>
-                <div class="ht-stat-card">
-                    <div class="ht-stat-value">@completionRate<span class="ht-stat-unit">%</span></div>
-                    <div class="ht-stat-label">Days tracked</div>
-                </div>
-                <div class="ht-stat-card">
-                    <div class="ht-stat-value">@currentStreak</div>
-                    <div class="ht-stat-label">Current streak</div>
-                </div>
-                <div class="ht-stat-card">
-                    <div class="ht-stat-value">@longestStreak</div>
-                    <div class="ht-stat-label">Longest streak</div>
-                </div>
-                <div class="ht-stat-card">
-                    <div class="ht-stat-value">@perfect</div>
-                    <div class="ht-stat-label">Perfect days (100%)</div>
-                </div>
-
-                <!-- Mini heatmap strip: last 30 days -->
-                <div class="ht-stat-section-title">Last 30 days</div>
-                <div class="ht-mini-strip">
-                    @for (int i = 29; i >= 0; i--)
-                    {
-                        var date = today.AddDays(-i);
-                        var key = date.ToString("yyyy-MM-dd");
-                        var completeness = entriesByDate.TryGetValue(key, out var e2) ? e2.Completeness : -1;
-                        <div class="ht-strip-cell"
-                             style="background-color:@GetColor(completeness);"
-                             title="@date.ToString("MMM d"): @(completeness >= 0 ? completeness + "%" : "No entry")">
-                        </div>
-                    }
-                </div>
-
-                <!-- Delete habit -->
-                <div class="ht-stat-danger">
-                    <button class="ht-btn ht-btn-danger" @onclick="DeleteHabit">Delete habit</button>
-                </div>
-            </div>
+            <HabitStatsView EntriesByDate="@_entries"
+                            SelectedHabit="@_selected"
+                            Today="@_today"
+                            OnDeleteHabit="DeleteHabit" />
         }
     }
-    else if (habits.Count == 0)
+    else if (_habits.Count == 0)
     {
-        <div class="ht-empty-state">
-            <div class="ht-empty-icon">📋</div>
-            <p>Track your daily habits and visualise your progress.</p>
-            <button class="ht-btn ht-btn-primary" @onclick="OpenAddHabit">Create your first habit</button>
+        <div class="flex-1 flex flex-col items-center justify-center gap-4 p-8 text-center animate-empty-in">
+            <div class="text-6xl">📋</div>
+            <p class="text-sm text-gray-500 dark:text-gray-400 max-w-[260px] leading-relaxed">
+                Track your daily habits and visualise your progress.
+            </p>
+            <button class="px-6 py-3 rounded-xl bg-green-600 hover:bg-green-700 active:scale-95 text-white text-sm font-semibold transition-all"
+                    @onclick="() => _showAddHabit = true">Create your first habit</button>
         </div>
     }
 
 </div>
 
-<!-- ════ ADD HABIT MODAL ════ -->
-@if (showAddHabit)
-{
-    <div class="ht-overlay" @onclick="() => showAddHabit = false">
-        <div class="ht-modal" @onclick:stopPropagation>
-            <h2 class="ht-modal-title">New Habit</h2>
-            <label class="ht-label">Name</label>
-            <input class="ht-input" placeholder="e.g. Morning run" @bind="newHabit.Name" @bind:event="oninput" maxlength="60" />
-            <label class="ht-label">Description <span class="ht-optional">(optional)</span></label>
-            <textarea class="ht-textarea" placeholder="What does success look like?" @bind="newHabit.Description" rows="3"></textarea>
-            @if (!string.IsNullOrEmpty(formError))
-            {
-                <p class="ht-error">@formError</p>
-            }
-            <div class="ht-modal-actions">
-                <button class="ht-btn ht-btn-outline" @onclick="() => showAddHabit = false">Cancel</button>
-                <button class="ht-btn ht-btn-primary" @onclick="AddHabit">Save</button>
-            </div>
-        </div>
-    </div>
-}
+<AddHabitModal Show="@_showAddHabit"
+               ShowChanged="v => _showAddHabit = v"
+               OnSave="AddHabit" />
 
-<!-- ════ ADD / EDIT ENTRY MODAL ════ -->
-@if (showAddEntry)
-{
-    <div class="ht-overlay" @onclick="() => showAddEntry = false">
-        <div class="ht-modal" @onclick:stopPropagation>
-            <h2 class="ht-modal-title">@(editingEntry is not null ? "Edit Entry" : "Add Entry")</h2>
-            <label class="ht-label">Date</label>
-            <input class="ht-input" type="date" @bind="entryDateString" />
-            <label class="ht-label">Completeness: <strong>@newEntry.Completeness%</strong></label>
-            <input class="ht-range" type="range" min="0" max="100" step="5"
-                   @bind="newEntry.Completeness" @bind:event="oninput" />
-            <div class="ht-range-labels">
-                <span>0%</span><span>50%</span><span>100%</span>
-            </div>
-            <label class="ht-label">Notes <span class="ht-optional">(optional)</span></label>
-            <textarea class="ht-textarea" placeholder="How did it go?" @bind="newEntry.Notes" rows="3"></textarea>
-            @if (!string.IsNullOrEmpty(formError))
-            {
-                <p class="ht-error">@formError</p>
-            }
-            <div class="ht-modal-actions">
-                @if (editingEntry is not null)
-                {
-                    <button class="ht-btn ht-btn-danger" @onclick="DeleteEntry">Delete</button>
-                }
-                <button class="ht-btn ht-btn-outline" @onclick="() => showAddEntry = false">Cancel</button>
-                <button class="ht-btn ht-btn-primary" @onclick="SaveEntry">Save</button>
-            </div>
-        </div>
-    </div>
-}
+<AddEntryModal Show="@_showAddEntry"
+               ShowChanged="v => _showAddEntry = v"
+               InitialEntry="@_draftEntry"
+               EditingEntry="@_editingEntry"
+               ExistingDates="@_entries.Keys"
+               OnSave="SaveEntry"
+               OnDelete="DeleteEntry" />
 
 @code {
-    // ── State ──────────────────────────────────────────
-    private List<Habit> habits = [];
-    private string selectedHabitId = "";
-    private Habit? selectedHabit => habits.FirstOrDefault(h => h.Id == selectedHabitId);
-    private Dictionary<string, HabitEntry> entriesByDate = [];
-    private DateOnly today = DateOnly.FromDateTime(DateTime.Today);
+    // ── State ──────────────────────────────────────────────────────────────────
+    private List<Habit>                    _habits   = [];
+    private string                         _selectedId = "";
+    private Habit?                         _selected => _habits.FirstOrDefault(h => h.Id == _selectedId);
+    private Dictionary<string, HabitEntry> _entries  = [];
+    private readonly DateOnly              _today    = DateOnly.FromDateTime(DateTime.Today);
 
-    private bool showStats;
-    private bool showAddHabit;
-    private bool showAddEntry;
-    private string formError = "";
+    private bool _stats, _showAddHabit, _showAddEntry, _dark, _shouldScroll;
 
-    private Habit newHabit = new();
-    private HabitEntry newEntry = new();
-    private HabitEntry? editingEntry;
+    // Entry form state (owned here so modals get fresh snapshots)
+    private HabitEntry? _draftEntry;
+    private HabitEntry? _editingEntry;
 
-    // Two-way bind for date input (type="date" needs yyyy-MM-dd string)
-    private string entryDateString
-    {
-        get => newEntry.Date;
-        set => newEntry.Date = value;
-    }
-
-    // ── Lifecycle ──────────────────────────────────────
+    // ── Lifecycle ──────────────────────────────────────────────────────────────
     protected override async Task OnInitializedAsync()
     {
-        habits = await HabitSvc.GetHabitsAsync();
-        habits = [.. habits.OrderBy(h => h.CreatedAt)];
-        if (habits.Count > 0)
+        _habits = [.. (await HabitSvc.GetHabitsAsync()).OrderBy(h => h.CreatedAt)];
+        if (_habits.Count > 0) { _selectedId = _habits[0].Id; await LoadEntries(); _shouldScroll = true; }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
         {
-            selectedHabitId = habits[0].Id;
-            await LoadEntries();
+            _dark = await JS.InvokeAsync<bool>("darkMode.isDark");
+            StateHasChanged();
+        }
+        if (_shouldScroll)
+        {
+            _shouldScroll = false;
+            await JS.InvokeVoidAsync("scrollToBottom", "ht-grid-scroll");
         }
     }
 
-    private async Task OnHabitChanged()
+    // ── Navigation ─────────────────────────────────────────────────────────────
+    private async Task OnHabitSelected(string id)
     {
-        showStats = false;
+        _selectedId = id;
+        _stats = false;
         await LoadEntries();
+        _shouldScroll = true;
     }
 
     private async Task LoadEntries()
     {
-        if (selectedHabit is null) return;
-        var list = await HabitSvc.GetEntriesAsync(selectedHabit.Id);
-        entriesByDate = list.ToDictionary(e => e.Date, e => e);
+        if (_selected is null) return;
+        var list = await HabitSvc.GetEntriesAsync(_selected.Id);
+        _entries = list.ToDictionary(e => e.Date, e => e);
     }
 
-    // ── Grid helpers ───────────────────────────────────
-    private List<DateOnly> GetMonthsToDisplay()
+    private async Task ToggleDark()
+        => _dark = await JS.InvokeAsync<bool>("darkMode.toggle");
+
+    // ── Habit CRUD ─────────────────────────────────────────────────────────────
+    private async Task AddHabit(Habit habit)
     {
-        var months = new List<DateOnly>();
-        DateOnly start;
-        if (selectedHabit is not null && DateOnly.TryParse(selectedHabit.CreatedAt, out var created))
-            start = new DateOnly(created.Year, created.Month, 1);
-        else
-            start = new DateOnly(today.Year, today.Month, 1).AddMonths(-11);
-
-        // Cap at 12 months back from today
-        var cap = new DateOnly(today.Year, today.Month, 1).AddMonths(-11);
-        if (start < cap) start = cap;
-
-        for (var m = start; m <= today; m = m.AddMonths(1))
-            months.Add(m);
-        return months;
-    }
-
-    private static string GetColor(int completeness) => completeness switch
-    {
-        < 0  => "#ebedf0",  // no entry
-        0    => "#ebedf0",
-        <= 25 => "#9be9a8",
-        <= 50 => "#40c463",
-        <= 75 => "#30a14e",
-        _    => "#216e39",
-    };
-
-    private static string GetTooltip(DateOnly date, int completeness, bool isFuture)
-    {
-        if (isFuture) return date.ToString("MMM d");
-        return completeness >= 0
-            ? $"{date:MMM d}: {completeness}%"
-            : $"{date:MMM d}: No entry";
-    }
-
-    // ── Day click: open edit modal if entry exists, else add new ──
-    private void OnDayClick(DateOnly date, HabitEntry? entry)
-    {
-        if (date > today) return;
-        editingEntry = entry;
-        newEntry = entry is not null
-            ? new HabitEntry { Id = entry.Id, HabitId = entry.HabitId, Date = entry.Date, Completeness = entry.Completeness, Notes = entry.Notes }
-            : new HabitEntry { HabitId = selectedHabit!.Id, Date = date.ToString("yyyy-MM-dd"), Completeness = 100 };
-        formError = "";
-        showAddEntry = true;
-    }
-
-    // ── Add Habit ──────────────────────────────────────
-    private void OpenAddHabit()
-    {
-        newHabit = new Habit();
-        formError = "";
-        showAddHabit = true;
-    }
-
-    private async Task AddHabit()
-    {
-        if (string.IsNullOrWhiteSpace(newHabit.Name))
-        {
-            formError = "Please enter a name.";
-            return;
-        }
-        await HabitSvc.SaveHabitAsync(newHabit);
-        habits.Add(newHabit);
-        selectedHabitId = newHabit.Id;
+        await HabitSvc.SaveHabitAsync(habit);
+        _habits.Add(habit);
+        _selectedId = habit.Id;
         await LoadEntries();
-        showAddHabit = false;
-        showStats = false;
+        _stats = false;
     }
 
     private async Task DeleteHabit()
     {
-        if (selectedHabit is null) return;
-        // Delete all entries first
-        var entries = await HabitSvc.GetEntriesAsync(selectedHabit.Id);
-        foreach (var e in entries)
+        if (_selected is null) return;
+        foreach (var e in await HabitSvc.GetEntriesAsync(_selected.Id))
             await HabitSvc.DeleteEntryAsync(e.Id);
-
-        await HabitSvc.DeleteHabitAsync(selectedHabit.Id);
-        habits.Remove(selectedHabit);
-        selectedHabitId = habits.Count > 0 ? habits[0].Id : "";
+        await HabitSvc.DeleteHabitAsync(_selected.Id);
+        _habits.Remove(_selected);
+        _selectedId = _habits.Count > 0 ? _habits[0].Id : "";
         await LoadEntries();
-        showStats = false;
+        _stats = false;
     }
 
-    // ── Add / Edit Entry ───────────────────────────────
-    private void OpenAddEntry()
+    // ── Entry CRUD ─────────────────────────────────────────────────────────────
+    private void OpenNewEntry()
     {
-        editingEntry = null;
-        newEntry = new HabitEntry
-        {
-            HabitId = selectedHabit!.Id,
-            Date = today.ToString("yyyy-MM-dd"),
-            Completeness = 100
-        };
-        formError = "";
-        showAddEntry = true;
+        _editingEntry = null;
+        _draftEntry   = new HabitEntry { HabitId = _selected!.Id, Date = _today.ToString("yyyy-MM-dd"), Completeness = 100 };
+        _showAddEntry = true;
     }
 
-    private async Task SaveEntry()
+    private void OpenEntryForDay(DateOnly date)
     {
-        if (string.IsNullOrWhiteSpace(newEntry.Date))
-        {
-            formError = "Please select a date.";
-            return;
-        }
-        if (editingEntry is null)
-        {
-            // Check for duplicate date
-            if (entriesByDate.ContainsKey(newEntry.Date))
-            {
-                formError = "An entry for this date already exists. Tap the day cell to edit it.";
-                return;
-            }
-        }
-
-        newEntry.HabitId = selectedHabit!.Id;
-        await HabitSvc.SaveEntryAsync(newEntry);
-        entriesByDate[newEntry.Date] = newEntry;
-        showAddEntry = false;
+        if (date > _today) return;
+        var key = date.ToString("yyyy-MM-dd");
+        _entries.TryGetValue(key, out var existing);
+        _editingEntry = existing;
+        _draftEntry   = existing is not null
+            ? new HabitEntry { Id = existing.Id, HabitId = existing.HabitId, Date = existing.Date, Completeness = existing.Completeness, Notes = existing.Notes }
+            : new HabitEntry { HabitId = _selected!.Id, Date = key, Completeness = 100 };
+        _showAddEntry = true;
     }
 
-    private async Task DeleteEntry()
+    private async Task SaveEntry(HabitEntry entry)
     {
-        if (editingEntry is null) return;
-        await HabitSvc.DeleteEntryAsync(editingEntry.Id);
-        entriesByDate.Remove(editingEntry.Date);
-        showAddEntry = false;
+        entry.HabitId = _selected!.Id;
+        await HabitSvc.SaveEntryAsync(entry);
+        _entries[entry.Date] = entry;
     }
 
-    // ── Statistics ─────────────────────────────────────
-    private (int current, int longest) ComputeStreaks()
+    private async Task DeleteEntry(HabitEntry entry)
     {
-        if (entriesByDate.Count == 0) return (0, 0);
-
-        int current = 0, longest = 0, run = 0;
-
-        // Walk backwards from today
-        for (var d = today; d >= today.AddDays(-365); d = d.AddDays(-1))
-        {
-            if (entriesByDate.TryGetValue(d.ToString("yyyy-MM-dd"), out var e) && e.Completeness > 0)
-            {
-                run++;
-                if (run > longest) longest = run;
-                if (d > today.AddDays(-run)) current = run; // still contiguous from today
-            }
-            else
-            {
-                if (current == 0) current = run > 0 ? 0 : 0; // not contiguous from today
-                run = 0;
-            }
-        }
-
-        // Recalculate current streak properly
-        current = 0;
-        for (var d = today; ; d = d.AddDays(-1))
-        {
-            if (entriesByDate.TryGetValue(d.ToString("yyyy-MM-dd"), out var e) && e.Completeness > 0)
-                current++;
-            else
-                break;
-        }
-
-        return (current, longest);
+        await HabitSvc.DeleteEntryAsync(entry.Id);
+        _entries.Remove(entry.Date);
     }
 }

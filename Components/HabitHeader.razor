@@ -1,0 +1,85 @@
+@using TaskManager.Models
+
+<div class="flex items-center gap-2 px-4 py-3 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 shrink-0">
+
+    @if (Habits.Count == 0)
+    {
+        <span class="flex-1 text-sm text-gray-400 dark:text-gray-500">No habits yet</span>
+    }
+    else
+    {
+        <!-- Invisible click-outside catcher -->
+        @if (_open)
+        {
+            <div class="fixed inset-0 z-20" @onclick="() => _open = false"></div>
+        }
+
+        <!-- Dropdown trigger + list -->
+        <div class="flex-1 min-w-0 relative z-30" @onclick:stopPropagation>
+            <button class="w-full flex items-center justify-between gap-2 px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm font-medium hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                    @onclick="() => _open = !_open">
+                <span class="truncate">@(Habits.FirstOrDefault(h => h.Id == SelectedHabitId)?.Name ?? "Select habit")</span>
+                <svg class="w-4 h-4 text-gray-400 shrink-0 transition-transform duration-200 @(_open ? "rotate-180" : "")"
+                     fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+            </button>
+
+            @if (_open)
+            {
+                <div class="absolute top-full left-0 right-0 mt-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl overflow-hidden animate-dropdown">
+                    @foreach (var h in Habits)
+                    {
+                        var isSelected = h.Id == SelectedHabitId;
+                        <button class="w-full text-left px-3.5 py-2.5 text-sm transition-colors
+                                       @(isSelected ? "text-green-600 dark:text-green-400 font-semibold bg-green-50 dark:bg-green-900/20"
+                                                    : "text-gray-800 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700/60")"
+                                @onclick="() => Pick(h.Id)">
+                            @h.Name
+                        </button>
+                    }
+                </div>
+            }
+        </div>
+    }
+
+    <button class="px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-sm font-semibold hover:bg-gray-100 dark:hover:bg-gray-800 active:scale-95 transition-all"
+            @onclick="OnAddHabitClicked">+ Habit</button>
+
+    <!-- Dark / light toggle -->
+    <button class="p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 active:scale-95 transition-all"
+            @onclick="OnToggleDarkMode" title="Toggle theme">
+        @if (IsDarkMode)
+        {
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="5" />
+                <path stroke-linecap="round" d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+            </svg>
+        }
+        else
+        {
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+            </svg>
+        }
+    </button>
+
+</div>
+
+@code {
+    [Parameter, EditorRequired] public List<Habit> Habits { get; set; } = [];
+    [Parameter, EditorRequired] public string SelectedHabitId { get; set; } = "";
+    [Parameter] public EventCallback<string> SelectedHabitIdChanged { get; set; }
+    [Parameter] public EventCallback OnAddHabitClicked { get; set; }
+    [Parameter] public EventCallback OnToggleDarkMode { get; set; }
+    [Parameter] public bool IsDarkMode { get; set; }
+
+    private bool _open;
+
+    private async Task Pick(string id)
+    {
+        _open = false;
+        if (id != SelectedHabitId)
+            await SelectedHabitIdChanged.InvokeAsync(id);
+    }
+}

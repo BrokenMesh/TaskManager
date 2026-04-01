@@ -1,0 +1,123 @@
+@using TaskManager.Models
+
+@if (Show)
+{
+    <div class="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-end sm:items-center justify-center z-50 animate-overlay-in"
+         @onclick="() => ShowChanged.InvokeAsync(false)">
+        <div class="bg-white dark:bg-gray-900 rounded-t-3xl sm:rounded-2xl px-5 pt-6 pb-8 w-full sm:max-w-sm flex flex-col gap-3 animate-modal-in max-h-[90dvh] overflow-y-auto"
+             @onclick:stopPropagation>
+
+            <h2 class="text-lg font-bold text-gray-900 dark:text-gray-100">
+                @(EditingEntry is not null ? "Edit Entry" : "Add Entry")
+            </h2>
+
+            <div>
+                <label class="text-xs font-semibold text-gray-500 dark:text-gray-400 block mb-1">Date</label>
+                <input class="w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:border-green-500 dark:focus:border-green-400 transition-colors dark:[color-scheme:dark]"
+                       type="date" @bind="_date" />
+            </div>
+
+            <div>
+                <label class="text-xs font-semibold text-gray-500 dark:text-gray-400 block mb-2">
+                    Completeness: <strong class="text-gray-900 dark:text-gray-100 font-bold">@_completeness%</strong>
+                </label>
+                <input class="w-full accent-green-600" type="range" min="0" max="100" step="5"
+                       @bind="_completeness" @bind:event="oninput" />
+                <div class="flex justify-between text-[10px] text-gray-400 mt-0.5">
+                    <span>0%</span><span>50%</span><span>100%</span>
+                </div>
+            </div>
+
+            <div>
+                <label class="text-xs font-semibold text-gray-500 dark:text-gray-400 block mb-1">
+                    Notes <span class="font-normal text-gray-400">(optional)</span>
+                </label>
+                <textarea class="w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm resize-none focus:outline-none focus:border-green-500 dark:focus:border-green-400 transition-colors font-sans"
+                          placeholder="How did it go?" @bind="_notes" rows="3"></textarea>
+            </div>
+
+            @if (!string.IsNullOrEmpty(_error))
+            {
+                <p class="text-red-500 text-xs -mt-1">@_error</p>
+            }
+
+            <div class="flex gap-2 pt-1">
+                @if (EditingEntry is not null)
+                {
+                    <button class="px-4 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 active:scale-95 text-white text-sm font-semibold transition-all"
+                            @onclick="Delete">Delete</button>
+                }
+                <button class="px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-sm font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 active:scale-95 transition-all"
+                        @onclick="() => ShowChanged.InvokeAsync(false)">Cancel</button>
+                <button class="flex-1 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 active:bg-green-800 active:scale-[0.98] text-white text-sm font-semibold transition-all"
+                        @onclick="Save">Save</button>
+            </div>
+
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool Show { get; set; }
+    [Parameter] public EventCallback<bool> ShowChanged { get; set; }
+
+    /// Entry to pre-populate the form (required when Show becomes true)
+    [Parameter] public HabitEntry? InitialEntry { get; set; }
+    /// Non-null when editing an existing entry (enables the Delete button)
+    [Parameter] public HabitEntry? EditingEntry { get; set; }
+    /// Duplicate-check: dates that already have an entry (excludes the one being edited)
+    [Parameter] public IReadOnlyCollection<string> ExistingDates { get; set; } = [];
+
+    [Parameter] public EventCallback<HabitEntry> OnSave { get; set; }
+    [Parameter] public EventCallback<HabitEntry> OnDelete { get; set; }
+
+    private DateOnly _date;
+    private int _completeness = 100;
+    private string _notes = "";
+    private string _error = "";
+
+    private bool _lastShow;
+
+    protected override void OnParametersSet()
+    {
+        // Populate form only when the modal transitions from hidden → visible
+        if (Show && !_lastShow && InitialEntry is not null)
+        {
+            _date         = DateOnly.TryParse(InitialEntry.Date, out var d) ? d : DateOnly.FromDateTime(DateTime.Today);
+            _completeness = InitialEntry.Completeness;
+            _notes        = InitialEntry.Notes;
+            _error        = "";
+        }
+        _lastShow = Show;
+    }
+
+    private async Task Save()
+    {
+        var dateStr = _date.ToString("yyyy-MM-dd");
+        if (string.IsNullOrWhiteSpace(dateStr)) { _error = "Please select a date."; return; }
+
+        if (EditingEntry is null && ExistingDates.Contains(dateStr))
+        {
+            _error = "An entry for this date already exists. Tap the day cell to edit it.";
+            return;
+        }
+
+        var entry = new HabitEntry
+        {
+            Id           = EditingEntry?.Id ?? Guid.NewGuid().ToString(),
+            HabitId      = InitialEntry?.HabitId ?? "",
+            Date         = dateStr,
+            Completeness = _completeness,
+            Notes        = _notes.Trim(),
+        };
+        await OnSave.InvokeAsync(entry);
+        await ShowChanged.InvokeAsync(false);
+    }
+
+    private async Task Delete()
+    {
+        if (EditingEntry is null) return;
+        await OnDelete.InvokeAsync(EditingEntry);
+        await ShowChanged.InvokeAsync(false);
+    }
+}
