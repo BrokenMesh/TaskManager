@@ -31,9 +31,9 @@ jobs:
 
       - name: Publish
         run: |
+          # Set base href BEFORE publish so the import map and SRI hash are generated correctly
+          sed -i 's|<base href="/" />|<base href="/TaskManager/" />|g' wwwroot/index.html
           dotnet publish -c Release -o publish
-          # Fix base href for GitHub Pages subdirectory hosting
-          sed -i 's|<base href="/" />|<base href="/TaskManager/" />|g' publish/wwwroot/index.html
           # Prevent Jekyll from ignoring _framework folder
           touch publish/wwwroot/.nojekyll
 

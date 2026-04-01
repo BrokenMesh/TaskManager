@@ -3,7 +3,7 @@
   "short_name": "Habits",
   "description": "Track your daily habits with a GitHub-style heatmap grid.",
   "id": "./",
-  "start_url": "./habits",
+  "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
