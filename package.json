@@ -1,0 +1,32 @@
+{
+  "name": "taskmanager",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "build:dotnet": "dotnet publish -c Release -o publish -p:BlazorEnableCompression=false && sed -i 's|<base href=\"/TaskManager/\" />|<base href=\"/\" />|g' publish/wwwroot/index.html",
+    "sync:android": "npx cap sync android",
+    "build:android": "npm run build:dotnet && npm run sync:android",
+    "open:android": "npx cap open android"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BrokenMesh/TaskManager.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/BrokenMesh/TaskManager/issues"
+  },
+  "homepage": "https://github.com/BrokenMesh/TaskManager#readme",
+  "dependencies": {
+    "@capacitor/android": "^8.3.0",
+    "@capacitor/cli": "^8.3.0",
+    "@capacitor/core": "^8.3.0"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.2"
+  }
+}
