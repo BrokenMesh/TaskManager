@@ -36,6 +36,8 @@ jobs:
           # Disable compression: GitHub Pages can't serve pre-compressed .br/.gz files
           # with the correct Content-Encoding headers, causing 404s on _framework files
           dotnet publish -c Release -o publish -p:BlazorEnableCompression=false
+          # Remove compressed files that causes conflicts on GitHub Pages
+          rm -f publish/wwwroot/_framework/*.br publish/wwwroot/_framework/*.gz
           # Prevent Jekyll from ignoring _framework folder
           touch publish/wwwroot/.nojekyll
 
