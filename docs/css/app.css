@@ -1,0 +1,34 @@
+/* ── Day cell: spring hover (cubic-bezier not expressible in Tailwind config) */
+.ht-day {
+    transition: transform 0.15s cubic-bezier(.34, 1.56, .64, 1), box-shadow 0.15s ease;
+}
+
+.ht-day:hover:not(.ht-day-future) {
+    transform: scale(1.18);
+    z-index: 10;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.ht-day:active:not(.ht-day-future) {
+    transform: scale(1.05);
+}
+
+/* ── Today ring with correct offset color per theme */
+.ht-day-today {
+    box-shadow: 0 0 0 2px #2da44e, 0 0 0 3.5px white;
+}
+
+html.dark .ht-day-today {
+    box-shadow: 0 0 0 2px white, 0 0 0 3.5px #030712; /* gray-950 */
+}
+
+/* ── Blazor error boundary */
+.blazor-error-boundary {
+    padding: 1rem 1rem 1rem 3.7rem;
+    color: white;
+    background: #b32121;
+}
+
+.blazor-error-boundary::after {
+    content: "An error has occurred.";
+}

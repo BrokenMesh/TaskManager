@@ -1,0 +1,29 @@
+{
+  "name": "Habit Tracker",
+  "short_name": "Habits",
+  "description": "Track your daily habits with a GitHub-style heatmap grid.",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "lang": "en",
+  "background_color": "#f9fafb",
+  "theme_color": "#2da44e",
+  "prefer_related_applications": false,
+  "categories": ["health", "lifestyle", "productivity"],
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ]
+}
